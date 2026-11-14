@@ -23,10 +23,13 @@ An existing `statusline.py` is backed up to `statusline.py.bak` and replaced. Re
 
 It is built for WSL2 because Claude Code runs in Linux while the speakers and microphone belong to Windows.
 
-1. **Speaking back:** a Claude Code `Stop` hook runs `speak.sh` after every final reply. It strips markdown, has
-   Piper (running in Linux) turn the text into a wav file, lowers the pitch with sox, and hands the file to
-   `play-wav.sh`, which plays it through Windows' own audio via `powershell.exe`. Playing through Windows avoids
-   dropouts that WSLg's Linux audio had.
+1. **Speaking back:** a Claude Code `Stop` hook runs `speak.sh` after every final reply. It strips markdown,
+   spells out abbreviations, and splits the text into chunks of whole sentences (about 100 characters, then
+   doubling). Piper (running in Linux) turns each chunk into a wav file and sox lowers the pitch, while
+   `play-wav.sh` plays the chunks back to back in one `powershell.exe` through Windows' own audio, so the first
+   chunk starts quickly and later ones are ready before they are needed. Playing through Windows avoids
+   dropouts that WSLg's Linux audio had. Paragraph breaks get an extra half-second pause, and the first chunk
+   starts with 0.4 s of silence so the audio device waking up doesn't clip the first words.
 2. **Interrupting:** while playing, `speak.sh` watches for the dictation recorder (`rec`/`sox`) starting, and
    `play-wav.sh` watches the Escape key. Either one stops the voice. The pitch tool is a copy of sox named
    `soxfx` so it isn't mistaken for the recorder.
@@ -35,9 +38,23 @@ It is built for WSL2 because Claude Code runs in Linux while the speakers and mi
    (a `UserPromptSubmit` hook sets a `busy` flag that the `Stop` hook clears), and a speaker while `speak.sh` is
    playing. It refreshes once a second, so animation is one frame per second.
 
+## Abbreviations
+
+A dot after an abbreviation reads as a sentence end ("Mr. <pause> Bennett"), so `speak.sh` spells these out first:
+
+| Written | Spoken |
+|---|---|
+| Mr. / Mrs. / Ms. | Mister / Missus / Miss |
+| Dr. / Prof. | Doctor / Professor |
+| vs. | versus |
+| e.g. / i.e. / etc. | for example / that is / etcetera |
+
+Others such as "St." (Saint or Street) and "Jr." (Junior) are left alone: telling them apart needs understanding the
+context, which would cost tokens and isn't worth it. To add a clear-cut one, extend the list in `files/speak.sh`.
+
 ## Tweaks
 
-- Voice speed and pauses: `--length-scale` and `--sentence-silence` in `files/speak.sh`.
+- Voice speed and pauses: `--length-scale` and `--sentence-silence` in `files/speak.sh`; paragraph pause: `pad 0 0.5`; start silence: `pad 0.4 0`.
 - Pitch: `pitch -200` (cents) in `files/speak.sh`.
 - Other voices: any model from https://huggingface.co/rhasspy/piper-voices, change `MODEL`/`URL` in `install.sh` and the model name in `files/speak.sh`.
 - Talk key: `f9` in `merge_settings.py` (F13 and above did not reach Claude Code in Windows Terminal).
