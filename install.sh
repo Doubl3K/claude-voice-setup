@@ -5,8 +5,8 @@ set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 P="$HOME/.local/share/piper"
 C="$HOME/.claude"
-MODEL=en_GB-jenny_dioco-medium
-URL=https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/jenny_dioco/medium
+V=https://huggingface.co/rhasspy/piper-voices/resolve/main
+VOICES="en_GB-jenny_dioco-medium=$V/en/en_GB/jenny_dioco/medium de_DE-thorsten-high=$V/de/de_DE/thorsten/high"
 
 grep -qi microsoft /proc/version || { echo "This setup needs WSL2 (it plays audio through Windows)."; exit 1; }
 command -v powershell.exe >/dev/null || { echo "powershell.exe not found: enable WSL interop."; exit 1; }
@@ -30,13 +30,15 @@ if [ ! -x "$P/venv/bin/python" ]; then
 fi
 "$P/venv/bin/python" -c "import piper" 2>/dev/null || "$P/venv/bin/pip" install -q piper-tts
 
-for f in "$MODEL.onnx" "$MODEL.onnx.json"; do
-  [ -f "$P/$f" ] || curl -fsSL -o "$P/$f" "$URL/$f"
+for v in $VOICES; do
+  for f in "${v%%=*}.onnx" "${v%%=*}.onnx.json"; do
+    [ -f "$P/$f" ] || curl -fsSL -o "$P/$f" "${v#*=}/$f"
+  done
 done
 # Same sox under another name, so the "is the talk recorder running?" check ignores our own pitch shifting.
 ln -sf "$(command -v sox)" "$P/soxfx"
 
-install -m 755 "$here/files/speak.sh" "$here/files/play-wav.sh" "$C/"
+install -m 755 "$here/files/speak.sh" "$here/files/play-wav.sh" "$here/files/speak-text.py" "$C/"
 [ -f "$C/statusline.py" ] && ! cmp -s "$here/files/statusline.py" "$C/statusline.py" && cp "$C/statusline.py" "$C/statusline.py.bak"
 install -m 644 "$here/files/statusline.py" "$C/statusline.py"
 
