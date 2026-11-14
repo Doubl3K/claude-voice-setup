@@ -1,5 +1,5 @@
 """Prepares a reply for speech: reads the Stop hook JSON on stdin, prints the language ("en" or "de") on the
-first line, then the text to speak, one chunk per line. Prints nothing when there is nothing to say."""
+first line with the session id (e.g. "en 1a2b"), then the text to speak, one chunk per line. Prints nothing when there is nothing to say."""
 import sys, json, re
 
 # Common words that exist in only one of the two languages (ambiguous ones like "die", "was", "so", "in" are left out).
@@ -26,12 +26,27 @@ ABBR = {
 }
 CODE = {"en": " code omitted. ", "de": " Code ausgelassen. "}
 
-def prepare(m):
+def session_name(transcript):
+    """The name the user gave the session (/rename or --name): the last custom-title entry of its transcript.
+    Auto-generated titles are a different entry type and are deliberately ignored."""
+    name = ""
+    try:
+        for l in open(transcript, errors="ignore"):
+            if '"custom-title"' in l:
+                try: e = json.loads(l)
+                except ValueError: continue
+                if e.get("type") == "custom-title": name = e.get("customTitle") or ""
+    except OSError: pass
+    return re.sub(r"[-_\s]+", " ", name).strip()
+
+def prepare(m, name=""):
     m = re.sub(r"```.*?```", "\0", m, flags=re.S)
     m = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", m)
     m = re.sub(r"[`#*_>|]", "", m)
     lang = language(m)
     m = m.replace("\0", CODE[lang])
+    if name:  # so replies queued from several sessions say whose they are
+        m = name.rstrip(".!?:") + ". " + m
     for a, b in ABBR[lang]:
         m = re.sub(r"\b" + (a if " ?" in a else re.escape(a)) + r"\.", b, m)
     # Chunks of whole sentences with doubling target length (100, 200, 400 chars...): each chunk is synthesized
@@ -55,6 +70,7 @@ if __name__ == "__main__":
                     t = "".join(c.get("text", "") for c in e["message"]["content"] if c.get("type") == "text")
                     if t: m = t
         except Exception: pass
-    lang, chunks = prepare(m)
+    lang, chunks = prepare(m, session_name(d.get("transcript_path") or ""))
+    sid = re.sub(r"[^\w-]", "", d.get("session_id") or "") or "none"  # names the per-session pid file
     if chunks:
-        sys.stdout.write(lang + "\n" + "\n".join(chunks))
+        sys.stdout.write(f"{lang} {sid}\n" + "\n".join(chunks))

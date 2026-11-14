@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 # Stop hook: read Claude's last reply aloud with Piper (local neural TTS) played via Windows audio.
 # Voice: Jenny (English, pitched down 200 cents) or Thorsten (German), chosen per reply by speak-text.py (soxfx = sox under another name so the recorder check below ignores it).
-# Speech is cut off when voice dictation starts recording (sox/rec appears) or a newer reply begins.
+# Speech is cut off when voice dictation starts recording (sox/rec appears) or a newer reply of the same session begins;
+# replies of different sessions wait for each other instead of cutting each other off.
 # shortcut: markdown stripping is crude (code blocks dropped, symbols removed), upgrade if reads sound odd.
 # shortcut: "talk key pressed" is detected as a running rec/sox process; upgrade if Claude Code changes its recorder.
 P="$HOME/.local/share/piper"
-pidfile="$HOME/.claude/speak.pid"
-[ -f "$pidfile" ] && kill -- "-$(cat "$pidfile")" 2>/dev/null
-
 out=$(python3 -I "$HOME/.claude/speak-text.py")
 [ -z "$out" ] && exit 0
-lang=${out%%$'\n'*}; text=${out#*$'\n'}
+head=${out%%$'\n'*}; text=${out#*$'\n'}; lang=${head% *}; sid=${head#* }
+# A newer reply of the same session replaces its older one (speaking or still waiting); other sessions queue.
+pidfile="$HOME/.claude/speak.$sid.pid"
+[ -f "$pidfile" ] && kill -- "-$(cat "$pidfile")" 2>/dev/null
 
 # Play through Windows' own audio stack: WSLg's PulseAudio (sox play) dropped audio in places.
 wintemp=$(cd /mnt/c && wslpath "$(cmd.exe /c 'echo %TEMP%' 2>/dev/null | tr -d '\r')")
@@ -35,7 +36,8 @@ P=$1; b=$2; lang=$3; shift 3
 if [ "$lang" = de ]; then model=de_DE-thorsten-high; fx=(gain -3); else model=en_GB-jenny_dioco-medium; fx=(gain -3 pitch -200); fi
 ( i=0; for c; do if ((i == 0)); then synth "$P" "$b.$i" "$c" pad 0.4 0; else synth "$P" "$b.$i" "$c"; fi || exit; i=$((i+1)); done ) \
   & sp=$!
-"$HOME/.claude/play-wav.sh" "$b" $# >/dev/null 2>&1
+# One reply plays at a time across sessions (flock); play-wav.sh records its pid in speak.pid for the status line.
+flock "$HOME/.claude/speak.lock" "$HOME/.claude/play-wav.sh" "$b" $# >/dev/null 2>&1
 kill $sp 2>/dev/null
 rm -f "$b"*' _ "$P" "$base" "$lang" "${chunks[@]}" &
 ps=$!
@@ -52,5 +54,6 @@ while kill -0 "$ps" 2>/dev/null; do
   fi
   sleep 0.1
 done
+[ "$(cat "$pidfile" 2>/dev/null)" = "$ps" ] && rm -f "$pidfile"  # never leave a pid that could be reused
 rm -f "$base"* "$wav"  # also covers jobs killed by a newer reply, which never reach their own rm
 exit 0

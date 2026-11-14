@@ -3,6 +3,7 @@
 # (starting one per chunk cost seconds of silence), waiting for each file to be synthesized. Escape stops it all.
 # shortcut: Escape is polled system-wide, so Esc in any app stops playback; upgrade only if that gets in the way.
 # shortcut: duration is read from a 44-byte wav header (what sox writes); upgrade if sox starts adding header chunks.
+echo $$ > "$HOME/.claude/speak.pid"  # tells the status line a reply is being read aloud
 base=$(wslpath -w "$1")
 powershell.exe -NoProfile -Command "
 Add-Type -Namespace K -Name U -MemberDefinition '[DllImport(\"user32.dll\")] public static extern short GetAsyncKeyState(int k);'

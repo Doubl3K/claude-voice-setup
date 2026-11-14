@@ -5,6 +5,7 @@ Talk to Claude Code and have its final replies read aloud, all locally except Cl
 - **Reply voice:** Piper (local neural TTS), British female voice "Jenny", pitched down 2 semitones, played through Windows audio. German replies are read by the German voice "Thorsten" in high quality (not pitched).
 - **Talking:** tap F9 to start dictation, tap again to send, Esc cancels.
 - **Interrupting:** the voice stops when you start dictating (F9) or press Escape.
+- **Several sessions:** replies from different Claude sessions are read one after another, never over each other. A reply from a session you named (`/rename` or `--name`) starts with that name, so you know which session is speaking; unnamed sessions don't announce anything. A newer reply from the same session replaces its older one. Pressing Escape skips the reply being read; a queued one then starts.
 - **Status line:** `TTS F9` plus an animated icon: mic while recording, thinking while Claude works, speaker while it speaks.
 
 ## Install
@@ -45,6 +46,16 @@ German and English words. German needs clear evidence: at least 3 German hits an
 Anything else, including very short or mixed text, gets the English voice. Code blocks don't count. Run the
 self-check after touching this: `python3 -m unittest discover tests`.
 
+## Several sessions
+
+- **Queue:** `speak.sh` takes a lock (`flock`) before playing, so replies from different Claude sessions are read one
+  after another. Each is already synthesized while it waits, so it starts almost at once when its turn comes.
+- **Replacing:** a newer reply from the same session replaces its own older one, whether that one is playing or
+  still waiting (a pid file per session id).
+- **Who is speaking:** a reply from a session you named (`/rename` or `--name`) starts with that name, e.g.
+  "Claude improvements. Done." `speak-text.py` reads it from the session's transcript (the last `custom-title`
+  entry). Unnamed sessions, and auto-generated titles, announce nothing. Hyphens and underscores are read as spaces.
+
 ## Abbreviations
 
 A dot after an abbreviation reads as a sentence end ("Mr. <pause> Bennett"), so `speak.sh` spells these out first:
@@ -73,6 +84,7 @@ context, which would cost tokens and isn't worth it. To add a clear-cut one, ext
 
 ## Known limits
 
+- The status line speaker and the thinking icon are shared by all sessions: either shows in every session while any of them speaks or works. The Stop hook has a 120 s timeout, so after waiting that long in the queue the dictation cut-off no longer works for that reply.
 - Only English and German are detected; a reply in another language gets the English voice.
 - Escape is read system-wide while a reply plays, so Esc in any window stops it.
 - "Talk key pressed" is detected as a running `rec`/`sox` process; if Claude Code changes its recorder, the cut-off stops working.

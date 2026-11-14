@@ -36,6 +36,22 @@ class Text(unittest.TestCase):
         self.assertTrue(chunks[0].endswith("."))
         self.assertIn("|", "".join(chunks))
 
+    def test_session_name_is_spoken_first(self):
+        _, chunks = speak_text.prepare("Done with the task.", "Claude improvements")
+        self.assertTrue(chunks[0].startswith("Claude improvements. Done"))
+        self.assertTrue(speak_text.prepare("Done.", "")[1][0].startswith("Done"))
+
+    def test_session_name_from_transcript(self):
+        import json, tempfile
+        lines = [{"type": "ai-title", "aiTitle": "Auto title"}, {"type": "custom-title", "customTitle": "first-name"},
+                 {"type": "assistant", "message": {"content": [{"type": "text", "text": "custom-title"}]}},
+                 {"type": "custom-title", "customTitle": "my_voice work"}]
+        with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as f:
+            f.write("\n".join(json.dumps(x) for x in lines))
+        self.assertEqual(speak_text.session_name(f.name), "my voice work")  # last one wins, auto title ignored
+        os.unlink(f.name)
+        self.assertEqual(speak_text.session_name("/nonexistent"), "")
+
     def test_empty(self):
         self.assertEqual(speak_text.prepare("   ")[1], [])
 
